@@ -7,6 +7,7 @@ from kubernetes.client.exceptions import ApiException
 from sqlalchemy import Column, Integer, DateTime, String, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.exc import MultipleResultsFound
 from uuid import uuid4
 
 import urllib3
@@ -99,13 +100,19 @@ class Task(db.Model, BaseModel):
         data = super().validate(data)
 
         data["from_controller"] = is_from_controller
+
         # Dataset validation
         if repository:
-            data["dataset"] = Dataset.query.filter(
-                Dataset.repository.ilike(repository)
-            ).one_or_none()
-            if data["dataset"] is None:
-                raise InvalidRequest(f"No datasets linked with the repository {repository}")
+            try:
+                data["dataset"] = Dataset.query.filter(
+                    Dataset.repository.ilike(repository)
+                ).one_or_none()
+                if data["dataset"] is None:
+                    raise InvalidRequest(f"No datasets linked with the repository {repository}")
+
+            except MultipleResultsFound:
+                raise InvalidRequest(f"Multiple datasets found for repository {repository}")
+
 
         elif kc_client.is_user_admin(user_token):
             ds_id = data.get("tags", {}).get("dataset_id")
